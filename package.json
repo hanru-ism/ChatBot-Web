@@ -2,7 +2,47 @@
   "name": "chatbot-web",
   "version": "1.0.0",
   "description": "",
-  "main": "script.js",
+  "main": "ngrok.js",
+  "dependencies": {
+    "abort-controller": "^3.0.0",
+    "agentkeepalive": "^4.6.0",
+    "asynckit": "^0.4.0",
+    "call-bind-apply-helpers": "^1.0.2",
+    "combined-stream": "^1.0.8",
+    "cors": "^2.8.5",
+    "delayed-stream": "^1.0.0",
+    "dotenv": "^16.5.0",
+    "dunder-proto": "^1.0.1",
+    "es-define-property": "^1.0.1",
+    "es-errors": "^1.3.0",
+    "es-object-atoms": "^1.1.1",
+    "es-set-tostringtag": "^2.1.0",
+    "event-target-shim": "^5.0.1",
+    "express": "^5.1.0",
+    "form-data": "^4.0.2",
+    "form-data-encoder": "^1.7.2",
+    "formdata-node": "^4.4.1",
+    "function-bind": "^1.1.2",
+    "get-intrinsic": "^1.3.0",
+    "get-proto": "^1.0.1",
+    "gopd": "^1.2.0",
+    "groq-sdk": "^0.23.0",
+    "has-symbols": "^1.1.0",
+    "has-tostringtag": "^1.0.2",
+    "hasown": "^2.0.2",
+    "humanize-ms": "^1.2.1",
+    "math-intrinsics": "^1.1.0",
+    "mime-db": "^1.52.0",
+    "mime-types": "^2.1.35",
+    "ms": "^2.1.3",
+    "node-domexception": "^1.0.0",
+    "node-fetch": "^2.7.0",
+    "tr46": "^0.0.3",
+    "undici-types": "^5.26.5",
+    "web-streams-polyfill": "^4.0.0-beta.3",
+    "webidl-conversions": "^3.0.1",
+    "whatwg-url": "^5.0.0"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js"
@@ -17,8 +57,5 @@
   "bugs": {
     "url": "https://github.com/hanru-ism/ChatBot-Web/issues"
   },
-  "homepage": "https://github.com/hanru-ism/ChatBot-Web#readme",
-  "dependencies": {
-    "@ngrok/ngrok": "^1.5.1"
-  }
+  "homepage": "https://github.com/hanru-ism/ChatBot-Web#readme"
 }
