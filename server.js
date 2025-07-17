@@ -170,7 +170,7 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📱 Open http://localhost:${PORT} in your browser`);
   console.log(`🔑 API Key configured: ${process.env.GROQ_API_KEY ? '✅' : '❌'}`);
