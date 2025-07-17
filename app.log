@@ -1,0 +1,13 @@
+nohup: ignoring input
+
+> chatbot-web@1.0.0 start
+> node server.js
+
+🚀 Server running on port 3000
+📱 Open http://localhost:3000 in your browser
+🔑 API Key configured: ✅
+📨 Received chat request: Hello test...
+✅ Chat response generated successfully
+📨 Received chat request: Hello test...
+✅ Chat response generated successfully
+Terminated
