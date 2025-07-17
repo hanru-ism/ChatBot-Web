@@ -19,11 +19,11 @@ app.use(compression());
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.FRONTEND_URL 
-    : ['http://localhost:3000', 'http://localhost:3005', 'http://127.0.0.1:3000', 'http://127.0.0.1:3005', 'http://10.176.120.164:3005', 'http://10.176.120.164:3000'],
-  credentials: false
+  origin: (origin, cb) => cb(null, true),   // allow all during dev
+  credentials: true
 }));
+// Note: Optionally narrow origins later with an env var list:
+// origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : (origin, cb) => cb(null, true),
 
 // Rate limiting
 const limiter = rateLimit({
@@ -64,7 +64,7 @@ if (!process.env.GROQ_API_KEY) {
 }
 
 // Chat endpoint
-app.post('/chat', chatLimiter, async (req, res) => {
+app.post('/api/chat', chatLimiter, async (req, res) => {
   const { prompt } = req.body;
   
   // Validate input
@@ -153,6 +153,14 @@ app.get('/health', (req, res) => {
   });
 });
 
+// API configuration endpoint
+app.get('/api/config', (req, res) => {
+  res.json({
+    apiBaseUrl: process.env.API_BASE_URL || '',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Serve main page
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
@@ -174,4 +182,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📱 Open http://localhost:${PORT} in your browser`);
   console.log(`🔑 API Key configured: ${process.env.GROQ_API_KEY ? '✅' : '❌'}`);
+  console.log(`🔧 API Base URL: ${process.env.API_BASE_URL || '(same-origin)'}`);
 });

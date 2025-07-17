@@ -8,18 +8,46 @@ class ChatBot {
         this.themeToggle = document.getElementById('themeToggle');
         this.clearChat = document.getElementById('clearChat');
         
+        // Initialize API base URL - will be configured after init
+        this.baseURL = null;
+        this.api = (path) => `${this.baseURL}/api${path}`;
+        
         this.isDarkMode = localStorage.getItem('darkMode') === 'true';
         this.chatHistory = JSON.parse(localStorage.getItem('chatHistory') || '[]');
         
         this.init();
     }
     
-    init() {
+    async init() {
+        await this.configureApiBaseUrl();
         this.setupEventListeners();
         this.setupTheme();
         this.loadChatHistory();
         this.setupAutoResize();
         this.updateCharCount();
+    }
+    
+    async configureApiBaseUrl() {
+        try {
+            // Default fallback: use current origin
+            const defaultBaseUrl = `${window.location.protocol}//${window.location.host}`;
+            
+            // Try to fetch API configuration from server
+            const response = await fetch(`${defaultBaseUrl}/api/config`);
+            
+            if (response.ok) {
+                const config = await response.json();
+                // Use configured API_BASE_URL if available, otherwise use default
+                this.baseURL = config.apiBaseUrl || defaultBaseUrl;
+                console.log(`🔧 API Base URL configured: ${this.baseURL}`);
+            } else {
+                throw new Error('Config endpoint not available');
+            }
+        } catch (error) {
+            // Fallback to current origin if config fetch fails
+            this.baseURL = `${window.location.protocol}//${window.location.host}`;
+            console.warn(`⚠️  Could not fetch API config, using fallback: ${this.baseURL}`);
+        }
     }
     
     setupEventListeners() {
@@ -115,7 +143,7 @@ class ChatBot {
         this.showTypingIndicator();
         
         try {
-            const response = await fetch('http://127.0.0.1:3000/chat', {
+            const response = await fetch(this.api('/chat'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
