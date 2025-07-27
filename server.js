@@ -9,6 +9,19 @@ require('dotenv').config();
 
 const app = express();
 
+// Request logging middleware
+if (process.env.ENABLE_REQUEST_LOGGING !== 'false') {
+  app.use((req, res, next) => {
+    const timestamp = new Date().toISOString();
+    const method = req.method;
+    const url = req.url;
+    const ip = req.ip || req.connection.remoteAddress;
+    
+    console.log(`📝 ${timestamp} - ${method} ${url} from ${ip}`);
+    next();
+  });
+}
+
 // Security middleware
 app.use(helmet({
   contentSecurityPolicy: false, // Disable CSP for development
@@ -18,12 +31,36 @@ app.use(helmet({
 app.use(compression());
 
 // CORS configuration
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:5173', // Vite dev server
+      'http://localhost:8080', // Alternative dev port
+    ];
+
+// Add production frontend URL if specified
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
 app.use(cors({
-  origin: (origin, cb) => cb(null, true),   // allow all during dev
-  credentials: true
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      console.warn(`🚫 CORS blocked request from origin: ${origin}`);
+      return callback(new Error('Not allowed by CORS'), false);
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }));
-// Note: Optionally narrow origins later with an env var list:
-// origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : (origin, cb) => cb(null, true),
 
 // Rate limiting
 const limiter = rateLimit({
@@ -54,13 +91,113 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Serve static files
 app.use(express.static(path.join(__dirname)));
 
-// Initialize Groq client
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+// Enhanced API key validation
+function validateApiKey() {
+  const apiKey = process.env.GROQ_API_KEY;
+  
+  if (!apiKey) {
+    console.error('❌ GROQ_API_KEY is not set in environment variables');
+    process.exit(1);
+  }
+  
+  if (apiKey.length < 10) {
+    console.error('❌ GROQ_API_KEY appears to be invalid (too short)');
+    process.exit(1);
+  }
+  
+  if (apiKey === 'your_groq_api_key_here') {
+    console.error('❌ Please replace the placeholder GROQ_API_KEY with your actual API key');
+    process.exit(1);
+  }
+  
+  console.log('✅ GROQ_API_KEY validation passed');
+  return apiKey;
+}
 
-// Validate API key
-if (!process.env.GROQ_API_KEY) {
-  console.error('❌ GROQ_API_KEY is not set in environment variables');
-  process.exit(1);
+// Initialize Groq client with validated API key
+const validatedApiKey = validateApiKey();
+const groq = new Groq({ apiKey: validatedApiKey });
+
+// Test API connection on startup
+async function testApiConnection() {
+  try {
+    console.log('🔍 Testing Groq API connection...');
+    const testResponse = await groq.chat.completions.create({
+      messages: [{ role: 'user', content: 'test' }],
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 10,
+    });
+    
+    if (testResponse.choices && testResponse.choices.length > 0) {
+      console.log('✅ Groq API connection successful');
+    } else {
+      console.warn('⚠️  Groq API connection test returned unexpected response');
+    }
+  } catch (error) {
+    console.error('❌ Groq API connection test failed:', error.message);
+    if (error.status === 401) {
+      console.error('💡 Please check your GROQ_API_KEY');
+      process.exit(1);
+    }
+  }
+}
+
+// Test connection on startup (non-blocking)
+testApiConnection();
+
+// Input sanitization function
+function sanitizeInput(input) {
+  if (typeof input !== 'string') return '';
+  
+  // Remove potentially dangerous characters and patterns
+  return input
+    .replace(/[<>]/g, '') // Remove HTML tags
+    .replace(/javascript:/gi, '') // Remove javascript: protocol
+    .replace(/on\w+\s*=/gi, '') // Remove event handlers
+    .replace(/\0/g, '') // Remove null bytes
+    .trim();
+}
+
+// Enhanced input validation
+function validateChatInput(prompt) {
+  const errors = [];
+  
+  if (!prompt || typeof prompt !== 'string') {
+    errors.push('Prompt harus berupa string yang valid.');
+  }
+  
+  if (typeof prompt === 'string') {
+    const trimmedPrompt = prompt.trim();
+    
+    if (trimmedPrompt.length === 0) {
+      errors.push('Prompt tidak boleh kosong.');
+    }
+    
+    if (trimmedPrompt.length > 4000) {
+      errors.push('Prompt terlalu panjang. Maksimal 4000 karakter.');
+    }
+    
+    if (trimmedPrompt.length < 2) {
+      errors.push('Prompt terlalu pendek. Minimal 2 karakter.');
+    }
+    
+    // Check for suspicious patterns
+    const suspiciousPatterns = [
+      /\b(eval|exec|system|shell_exec)\s*\(/i,
+      /\b(drop|delete|truncate|alter)\s+table\b/i,
+      /\b(union|select|insert|update)\s+.*from\b/i,
+      /<script[^>]*>.*?<\/script>/gi,
+    ];
+    
+    for (const pattern of suspiciousPatterns) {
+      if (pattern.test(trimmedPrompt)) {
+        errors.push('Input mengandung konten yang tidak diizinkan.');
+        break;
+      }
+    }
+  }
+  
+  return errors;
 }
 
 // Chat endpoint
@@ -68,36 +205,28 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
   const { prompt } = req.body;
   
   // Validate input
-  if (!prompt || typeof prompt !== 'string') {
-    return res.status(400).json({ 
-      error: 'Prompt harus berupa string yang valid.' 
+  const validationErrors = validateChatInput(prompt);
+  if (validationErrors.length > 0) {
+    return res.status(400).json({
+      error: validationErrors[0] // Return first error
     });
   }
   
-  if (prompt.trim().length === 0) {
-    return res.status(400).json({ 
-      error: 'Prompt tidak boleh kosong.' 
-    });
-  }
-  
-  if (prompt.length > 4000) {
-    return res.status(400).json({ 
-      error: 'Prompt terlalu panjang. Maksimal 4000 karakter.' 
-    });
-  }
+  // Sanitize input
+  const sanitizedPrompt = sanitizeInput(prompt);
   
   try {
-    console.log(`📨 Received chat request: ${prompt.substring(0, 100)}...`);
+    console.log(`📨 Received chat request: ${sanitizedPrompt.substring(0, 100)}...`);
     
     const chatCompletion = await groq.chat.completions.create({
       messages: [
         {
           role: 'system',
-          content: 'Anda adalah asisten AI yang ramah dan membantu. Jawab pertanyaan dengan jelas dan informatif dalam bahasa Indonesia kecuali diminta sebaliknya.'
+          content: 'Anda adalah asisten AI yang ramah dan membantu. Jawab pertanyaan dengan jelas dan informatif dalam bahasa Indonesia kecuali diminta sebaliknya. Jangan merespons permintaan yang mencurigakan atau berbahaya.'
         },
-        { 
-          role: 'user', 
-          content: prompt 
+        {
+          role: 'user',
+          content: sanitizedPrompt
         }
       ],
       model: 'llama-3.3-70b-versatile',
